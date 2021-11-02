@@ -1,0 +1,58 @@
+//统计视频观看数Top50所关联视频的所属类别Rank
+--第一步 选出views的TOP50,再把所属relatedId关联排名
+select videoId,relatedId,views,category
+from gulivideo_orc
+order by views desc limit 50;
+
+--第二步，炸裂相关relatedId
+select relate_name,t1.videoId
+from (select videoId,relatedId,views,category
+      from gulivideo_orc
+      order by views desc limit 50
+    )t1
+lateral view
+explode(t1.relatedId) tmp as relate_name;
+
+--****第三步超级重要的一步哦！！join操作！！！！
+select t2.relate_id,gulivideo_orc.category
+from(select relate_id
+     from (select videoId,relatedId,views,category
+           from gulivideo_orc
+           order by views desc limit 50
+          )t1
+              lateral view
+                  explode(t1.relatedId) tmp as relate_id
+
+        )t2 join gulivideo_orc on t2.relate_id=gulivideo_orc.videoId;
+--第四步上面这一步仅仅只是拿到表无法操作数据接着做，继续炸裂category
+select category_name,count(t3.relate_id) num
+                  from(select t2.relate_id,gulivideo_orc.category
+                       from(select relate_id
+                            from (select videoId,relatedId,views,category
+                                  from gulivideo_orc
+                                  order by views desc limit 50
+                                 )t1
+                                     lateral view
+                                         explode(t1.relatedId) tmp as relate_id
+
+                           )t2 join gulivideo_orc on t2.relate_id=gulivideo_orc.videoId
+                      )t3
+                          lateral view explode(t3.category) tmp as category_name
+                  group by category_name
+                  order by num desc;
+--第五步优化
+select category_name,count(t3.relate_id) num,rank() over(order by count(t3.relate_id) desc) rk
+from(select t2.relate_id,gulivideo_orc.category
+     from(select relate_id
+          from (select videoId,relatedId,views,category
+                from gulivideo_orc
+                order by views desc limit 50
+               )t1
+                   lateral view
+                       explode(t1.relatedId) tmp as relate_id
+
+         )t2 join gulivideo_orc on t2.relate_id=gulivideo_orc.videoId
+    )t3
+        lateral view explode(t3.category) tmp as category_name
+group by category_name
+order by num desc;
